@@ -12,6 +12,8 @@
 
 """Unitary gate."""
 
+from collections import OrderedDict
+import re
 from warnings import warn
 from typing import List, Optional, Union, Tuple
 import numpy as np
@@ -37,6 +39,9 @@ class Gate(Instruction):
         """
         self._label = label
         self.definition = None
+        self._qasm_name = None
+        self._qasm_definition = None
+        self._qasm_def_written = False
         super().__init__(name, num_qubits, 0, params)
 
     def to_matrix(self) -> np.ndarray:
@@ -240,3 +245,54 @@ class Gate(Instruction):
         else:
             raise CircuitError("Invalid param type {0} for gate {1}.".format(type(parameter),
                                                                              self.name))
+    def qasm(self):
+            """ The qasm for a controlled unitary gate """
+
+            # if this is a standard gate call super().qasm()
+            # else, define a custom qasm gate using gate's decomposition
+            match_unitary = bool(re.match("^(c|[0-9]*)?-?unitary$", self.name))
+            if not match_unitary:
+                return super().qasm()
+
+            # if this is true then we have written the gate definition already
+            # so we only need to write the name
+            if self._qasm_def_written:
+                return self._qasmif(self._qasm_name)
+
+            # we have worked out the definition before, but haven't written it yet
+            # so we need to write definition + name
+            if self._qasm_definition:
+                self._qasm_def_written = True
+                return self._qasm_definition + self._qasmif(self._qasm_name)
+
+            # need to work out the definition and then write it
+
+            # give this unitary a name
+            self._qasm_name = self.label if self.label else "unitary" + str(id(self))
+
+            # map from gates in the definition to params in the method
+            reg_to_qasm = OrderedDict()
+            current_reg = 0
+
+            gates_def = ""
+            for gate in self.definition:
+                # add regs from this gate to the overall set of params
+                for reg in gate[1] + gate[2]:
+                    if reg not in reg_to_qasm:
+                        reg_to_qasm[reg] = 'p' + str(current_reg)
+                        current_reg += 1
+
+                curr_gate = "\t%s %s;\n" % (gate[0].qasm(),
+                                            ",".join([reg_to_qasm[j]
+                                                      for j in gate[1] + gate[2]]))
+                gates_def += curr_gate
+
+            # name of gate + params + {definition}
+            overall = "gate " + self._qasm_name + \
+                      " " + ",".join(reg_to_qasm.values()) + \
+                      " {\n" + gates_def + "}\n"
+
+            self._qasm_def_written = True
+            self._qasm_definition = overall
+
+            return self._qasm_definition + self._qasmif(self._qasm_name)

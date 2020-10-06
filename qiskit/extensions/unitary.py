@@ -14,7 +14,6 @@
 Arbitrary unitary circuit instruction.
 """
 
-from collections import OrderedDict
 import numpy
 
 from qiskit.circuit import Gate, ControlledGate
@@ -67,9 +66,6 @@ class UnitaryGate(Gate):
             raise ExtensionError(
                 "Input matrix is not an N-qubit operator.")
 
-        self._qasm_name = None
-        self._qasm_definition = None
-        self._qasm_def_written = False
         # Store instruction params
         super().__init__('unitary', num_qubits, [data], label=label)
 
@@ -152,55 +148,6 @@ class UnitaryGate(Gate):
             # need to apply to _definition since open controls creates temporary definition
             cunitary._definition.global_phase = phase
         return cunitary
-
-    def qasm(self):
-        """ The qasm for a custom unitary gate
-        This is achieved by adding a custom gate that corresponds to the definition
-        of this gate. It gives the gate a random name if one hasn't been given to it.
-        """
-        # if this is true then we have written the gate definition already
-        # so we only need to write the name
-        if self._qasm_def_written:
-            return self._qasmif(self._qasm_name)
-
-        # we have worked out the definition before, but haven't written it yet
-        # so we need to write definition + name
-        if self._qasm_definition:
-            self._qasm_def_written = True
-            return self._qasm_definition + self._qasmif(self._qasm_name)
-
-        # need to work out the definition and then write it
-
-        # give this unitary a name
-        self._qasm_name = self.label if self.label else "unitary" + str(id(self))
-
-        # map from gates in the definition to params in the method
-        reg_to_qasm = OrderedDict()
-        current_reg = 0
-
-        gates_def = ""
-        for gate in self.definition.data:
-
-            # add regs from this gate to the overall set of params
-            for reg in gate[1] + gate[2]:
-                if reg not in reg_to_qasm:
-                    reg_to_qasm[reg] = 'p' + str(current_reg)
-                    current_reg += 1
-
-            curr_gate = "\t%s %s;\n" % (gate[0].qasm(),
-                                        ",".join([reg_to_qasm[j]
-                                                  for j in gate[1] + gate[2]]))
-            gates_def += curr_gate
-
-        # name of gate + params + {definition}
-        overall = "gate " + self._qasm_name + \
-                  " " + ",".join(reg_to_qasm.values()) + \
-                  " {\n" + gates_def + "}\n"
-
-        self._qasm_def_written = True
-        self._qasm_definition = overall
-
-        return self._qasm_definition + self._qasmif(self._qasm_name)
 
     def validate_parameter(self, parameter):
         """Unitary gate parameter has to be an ndarray."""

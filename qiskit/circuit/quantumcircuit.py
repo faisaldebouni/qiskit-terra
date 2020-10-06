@@ -17,6 +17,7 @@ import itertools
 import sys
 import warnings
 import numbers
+import re
 import multiprocessing as mp
 from collections import OrderedDict, defaultdict
 import numpy as np
@@ -1091,7 +1092,8 @@ class QuantumCircuit:
                 string_temp += "%s %s;\n" % (instruction.qasm(),
                                              ",".join(["%s[%d]" % (j.register.name, j.index)
                                                        for j in qargs + cargs]))
-            if instruction.name == 'unitary':
+            match_unitary = bool(re.match("^(c|[0-9]*)?-?unitary$", instruction.name))
+            if match_unitary:
                 unitary_gates.append(instruction)
 
         # this resets them, so if another call to qasm() is made the gate def is added again
